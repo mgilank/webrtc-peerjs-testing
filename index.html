@@ -21,10 +21,69 @@
 <body>
     <div id="video-container">
         <video id="local-video" autoplay playsinline></video>
+        <video id="remote-video-1" autoplay playsinline></video>
+        <video id="remote-video-2" autoplay playsinline></video>
+        <!-- add more <video> elements as needed -->
     </div>
+
 </body>
 
 <script>
+
+    const config = {
+            iceServers: [
+                {
+                    urls: "stun:stun.l.google.com:19302"
+                }
+            ]
+        };
+
+        const pc = new RTCPeerConnection(config);
+
+        pc.ontrack = (event) => {
+            // once a remote track is received, display it in a new <video> element
+            const remoteVideo = document.getElementById("remote-video-" + event.streams[0].id);
+            remoteVideo.srcObject = event.streams[0];
+            remoteVideo.play();
+        };
+
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
+            // once the user grants permission, display the stream in the local <video> element
+            const localVideo = document.getElementById("local-video");
+            localVideo.srcObject = stream;
+            localVideo.play();
+
+            // add the stream to the peer connection to send it to remote clients
+            stream.getTracks().forEach((track) => {
+                pc.addTrack(track, stream);
+            });
+        }).catch((error) => {
+            // handle errors here
+            console.error(error);
+        });
+
+        // establish a connection with a remote client using PeerJS
+        const conn = peer.connect("other-client-id"); // replace "other-client-id" with the ID of the other client
+
+        conn.on("open", () => {
+            // once the connection is established, create an SDP offer and send it to the remote client
+            pc.createOffer().then((offer) => {
+                return pc.setLocalDescription(offer);
+            }).then(() => {
+                conn.send(JSON.stringify(pc.localDescription));
+            }).catch((error) => {
+                // handle errors here
+                console.error(error);
+            });
+
+            // receive SDP answers from the remote client and set them as the remote description
+            conn.on("data", (data) => {
+                const remoteDescription = new RTCSessionDescription(JSON.parse(data));
+                pc.setRemoteDescription(remoteDescription);
+            });
+        });
+
+
     const peer = new Peer(); // create a PeerJS instance
 let myID; // declare a variable to store the client ID
 
@@ -46,7 +105,7 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) 
   videoContainer.appendChild(video);
 });
 
-const conn = peer.connect("other-client-id"); // replace "other-client-id" with the ID of the other client
+// const conn = peer.connect("other-client-id"); // replace "other-client-id" with the ID of the other client
 
 conn.on("open", () => {
   // once the connection is established, send your stream to the other client
